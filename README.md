@@ -1,220 +1,306 @@
-# Sendify para PHP y Laravel
+# Sendify for PHP and Laravel
 
 [![Packagist](https://img.shields.io/packagist/v/everesthome/sendify.svg)](https://packagist.org/packages/everesthome/sendify)
 [![Tests](https://github.com/everesthome/sendify-php/actions/workflows/run-tests.yml/badge.svg)](https://github.com/everesthome/sendify-php/actions/workflows/run-tests.yml)
-[![Descargas](https://img.shields.io/packagist/dt/everesthome/sendify.svg)](https://packagist.org/packages/everesthome/sendify)
-[![Licencia](https://img.shields.io/packagist/l/everesthome/sendify.svg)](LICENSE.md)
+[![Downloads](https://img.shields.io/packagist/dt/everesthome/sendify.svg)](https://packagist.org/packages/everesthome/sendify)
+[![License](https://img.shields.io/packagist/l/everesthome/sendify.svg)](LICENSE.md)
 
-Paquete: **https://packagist.org/packages/everesthome/sendify**
-
-Cliente del servicio Sendify para mandar WhatsApp desde cualquier aplicación PHP. En Laravel se
-instala, se ponen tres claves en el `.env` y ya:
+Client for the Sendify service: send WhatsApp messages from any PHP application. On Laravel you
+install it, add three keys to your `.env`, and you are done:
 
 ```php
-Sendify::TextMessageTo('5215551234567', 'Hola desde Laravel');
+Sendify::TextMessageTo('5215551234567', 'Hello from Laravel');
 ```
 
-El núcleo no depende de ningún framework: sólo cURL y JSON.
+The core is framework-agnostic — it only needs cURL and JSON.
 
-## Instalación
+**Package:** https://packagist.org/packages/everesthome/sendify
+
+## Table of contents
+
+- [Requirements](#requirements)
+- [Installation](#installation)
+- [Configuration](#configuration)
+- [Sending messages](#sending-messages)
+  - [Media](#media)
+  - [Responses](#responses)
+  - [Bulk sending](#bulk-sending)
+  - [Message actions](#message-actions)
+- [Instance status](#instance-status)
+- [Instance lifecycle](#instance-lifecycle)
+- [Webhooks, templates, automations, profile and statuses](#webhooks-templates-automations-profile-and-statuses)
+- [Multiple instances or servers](#multiple-instances-or-servers)
+- [Error handling](#error-handling)
+- [Using it without Laravel](#using-it-without-laravel)
+- [Testing](#testing)
+- [License](#license)
+
+## Requirements
+
+| Requirement | Version                                     |
+| ----------- | ------------------------------------------- |
+| PHP         | 8.2, 8.3 or 8.4                             |
+| Extensions  | `ext-curl`, `ext-json`                      |
+| Laravel     | 10, 11, 12 or 13 (optional — only for the facade and the service provider) |
+
+## Installation
 
 ```bash
 composer require everesthome/sendify
 ```
 
-En Laravel el service provider y la fachada `Sendify` se registran solos. La configuración es
-opcional:
+On Laravel the service provider and the `Sendify` facade are auto-discovered. Publishing the
+configuration file is optional:
 
 ```bash
 php artisan vendor:publish --tag=sendify-config
 ```
 
-## Configuración
+## Configuration
 
-En el `.env` de tu aplicación:
+Add this to your application's `.env`:
 
 ```dotenv
-SENDIFY_URL="https://sendify.miempresa.mx"
+SENDIFY_URL="https://sendify.mycompany.com"
 SENDIFY_CLIENT="snd_live_xxxxxxxxxxxxxxxx"
-SENDIFY_INSTANCE="ventas"
+SENDIFY_INSTANCE="sales"
 ```
 
-| Variable           | Qué es                                                                    |
-| ------------------ | ------------------------------------------------------------------------- |
-| `SENDIFY_URL`      | Base del servidor Sendify de esa empresa (cada empresa puede tener el suyo) |
-| `SENDIFY_CLIENT`   | API key de la instancia; viaja en el header `X-API-Key`                    |
-| `SENDIFY_INSTANCE` | ID numérico o nombre de la instancia de WhatsApp                           |
+| Variable           | What it is                                                                     |
+| ------------------ | ------------------------------------------------------------------------------ |
+| `SENDIFY_URL`      | Base URL of that company's Sendify server (each company may run its own)        |
+| `SENDIFY_CLIENT`   | API key of the instance; sent in the `X-API-Key` header                         |
+| `SENDIFY_INSTANCE` | Numeric ID or name of the WhatsApp instance                                     |
 
-También se aceptan sin guion bajo (`SENDIFYURL`, `SENDIFYCLIENT`, `SENDIFYINSTANCE`).
+The underscore-less variants are also accepted: `SENDIFYURL`, `SENDIFYCLIENT`, `SENDIFYINSTANCE`.
 
-Opcionales: `SENDIFY_TIMEOUT` (30), `SENDIFY_CONNECT_TIMEOUT` (10), `SENDIFY_RETRIES` (1),
-`SENDIFY_VERIFY_SSL` (true), `SENDIFY_CONNECTION` (`default`).
+Optional settings:
 
-## Uso
+| Variable                  | Default     | What it does                                                          |
+| ------------------------- | ----------- | --------------------------------------------------------------------- |
+| `SENDIFY_TIMEOUT`         | `30`        | Request timeout, in seconds                                            |
+| `SENDIFY_CONNECT_TIMEOUT` | `10`        | Connection timeout, in seconds                                         |
+| `SENDIFY_RETRIES`         | `1`         | Extra attempts for retryable `503` responses and for `429`             |
+| `SENDIFY_VERIFY_SSL`      | `true`      | TLS certificate verification                                           |
+| `SENDIFY_CONNECTION`      | `default`   | Connection the facade uses when none is given                          |
 
-Los nombres de método en PHP no distinguen mayúsculas, así que `Sendify::TextMessageTo()` y
-`Sendify::textMessageTo()` son lo mismo. Elige el estilo que prefieras.
+Besides the facade, the container also resolves the client by type hint:
+
+```php
+use EverestHome\Sendify\Sendify;
+
+public function __construct(private readonly Sendify $sendify)
+{
+}
+```
+
+## Sending messages
+
+PHP method names are case-insensitive, so `Sendify::TextMessageTo()` and
+`Sendify::textMessageTo()` are the exact same call. Pick whichever style you prefer.
 
 ```php
 use EverestHome\Sendify\Laravel\Facades\Sendify;
 
-Sendify::TextMessageTo('+52 55 1234 5678', 'Tu pedido va en camino');
-Sendify::ImageMessageTo('5215551234567', 'https://cdn.miempresa.mx/promo.jpg', 'Promo del mes');
-Sendify::DocumentMessageTo('5215551234567', storage_path('app/facturas/F-1023.pdf'), 'F-1023.pdf', 'Tu factura');
-Sendify::LocationMessageTo('5215551234567', 19.4326, -99.1332, 'Sucursal Centro');
-Sendify::ContactMessageTo('5215551234567', 'Soporte', '5215557654321');
-Sendify::PollMessageTo('5215551234567', '¿Qué horario prefieres?', ['Mañana', 'Tarde']);
-Sendify::TemplateMessageTo('5215551234567', 'bienvenida', ['nombre' => 'Jovan']);
+Sendify::TextMessageTo('+52 55 1234 5678', 'Your order is on its way');
+Sendify::ImageMessageTo('5215551234567', 'https://cdn.mycompany.com/promo.jpg', 'Promo of the month');
+Sendify::DocumentMessageTo('5215551234567', storage_path('app/invoices/F-1023.pdf'), 'F-1023.pdf', 'Your invoice');
+Sendify::LocationMessageTo('5215551234567', 19.4326, -99.1332, 'Downtown branch');
+Sendify::ContactMessageTo('5215551234567', 'Support', '5215557654321');
+Sendify::PollMessageTo('5215551234567', 'Which time works for you?', ['Morning', 'Afternoon']);
+Sendify::TemplateMessageTo('5215551234567', 'welcome', ['name' => 'Jovan']);
 ```
 
-El número se limpia solo: `+52 55 1234 5678`, `5215551234567` y `5215551234567@c.us` llegan igual.
-Los JID de grupo (`...@g.us`) se respetan tal cual.
+| Method                                                                  | Notes                                                        |
+| ----------------------------------------------------------------------- | ------------------------------------------------------------ |
+| `textMessageTo(string $to, string $text)`                                | Plain text                                                    |
+| `imageMessageTo(string $to, string $source, ?string $caption, ?string $mimetype)` | See [Media](#media)                                  |
+| `videoMessageTo(string $to, string $source, ?string $caption, ?string $mimetype)` | See [Media](#media)                                  |
+| `audioMessageTo(string $to, string $source, bool $ptt = false, ?string $mimetype)` | `$ptt = true` sends it as a voice note              |
+| `documentMessageTo(string $to, string $source, ?string $filename, ?string $caption, ?string $mimetype)` | Filename defaults to the local file's basename |
+| `stickerMessageTo(string $to, string $source, ?string $mimetype)`        | WebP stickers                                                 |
+| `locationMessageTo(string $to, float $lat, float $lng, ?string $description, ?string $address)` | —                                     |
+| `contactMessageTo(string $to, string $contactName, string $contactNumber)` | Shares a vCard                                             |
+| `pollMessageTo(string $to, string $name, array $options, ?int $selectableCount)` | Between 2 and 12 options                             |
+| `templateMessageTo(string $to, string $template, array $variables = [])` | Replaces the `{{placeholders}}` of a saved template           |
 
-Estilo encadenado si mandas varias cosas al mismo chat:
+Phone numbers are normalized for you: `+52 55 1234 5678`, `5215551234567` and
+`5215551234567@c.us` all arrive the same. Group JIDs (`...@g.us`) and `@s.whatsapp.net` JIDs are
+passed through untouched.
+
+Chained style when you send several things to the same chat:
 
 ```php
-Sendify::to('5215551234567')->text('Hola');
-Sendify::to('5215551234567')->voiceNote(storage_path('app/audios/nota.ogg'));
+Sendify::to('5215551234567')->text('Hi');
+Sendify::to('5215551234567')->voiceNote(storage_path('app/audio/note.ogg'));
+Sendify::to('5215551234567')->document(storage_path('app/invoices/F-1023.pdf'));
 ```
 
-### Medios
+`to()` returns a `PendingMessage` exposing `text()`, `image()`, `video()`, `audio()`,
+`voiceNote()`, `document()`, `sticker()`, `location()`, `contact()`, `poll()`, `template()`,
+`reply()`, `forward()` and `messages()`.
 
-Cualquier método de medios acepta una URL pública, una ruta local (se lee y se manda en base64 con
-su mimetype), un `data:` URI o base64 crudo (aquí sí hay que pasar el `mimetype`).
+### Media
 
-Dos reglas del servicio:
+Every media method accepts a public URL, a local path (it is read and sent as base64 with its
+mimetype), a `data:` URI, or raw base64 — with raw base64 you must pass the `mimetype` yourself.
 
-- **25 MB** máximo por archivo en base64. El cliente lo revisa antes de subir nada y lanza
-  `ValidationException` para no gastar el viaje.
-- La **URL la descarga el servidor**, así que tiene que resolver a una dirección pública: `localhost`,
-  LAN privada, link-local (incluido `169.254.169.254`) y CGNAT se rechazan con `400`. Si tu servidor
-  de medios vive en la misma red privada que Sendify, el servicio tiene que correr con
+Two service rules:
+
+- **25 MB** maximum per base64 file (`Media::MAX_BYTES`). The client checks the size before
+  uploading anything and throws `ValidationException` so you do not waste the round trip.
+- **URLs are downloaded by the server**, so they must resolve to a public address: `localhost`,
+  private LAN, link-local (including `169.254.169.254`) and CGNAT ranges are rejected with `400`.
+  If your media server lives on the same private network as Sendify, the service has to run with
   `ALLOW_PRIVATE_MEDIA_URLS=true`.
 
 ```php
 Sendify::VideoMessageTo('5215551234567', public_path('videos/demo.mp4'), 'Demo');
-Sendify::AudioMessageTo('5215551234567', 'https://cdn.miempresa.mx/nota.ogg', ptt: true);
-Sendify::StickerMessageTo('5215551234567', 'https://cdn.miempresa.mx/sticker.webp');
+Sendify::AudioMessageTo('5215551234567', 'https://cdn.mycompany.com/note.ogg', ptt: true);
+Sendify::StickerMessageTo('5215551234567', 'https://cdn.mycompany.com/sticker.webp');
 ```
 
-### Respuesta
+### Responses
 
-Todos los envíos devuelven un `Response` que se puede leer como array o con atajos:
+Every send returns a `Response` you can read as an array or through shortcuts:
 
 ```php
-$response = Sendify::TextMessageTo('5215551234567', 'Hola');
+$response = Sendify::TextMessageTo('5215551234567', 'Hi');
 
 $response->messageId();      // 'BAE5...'
 $response->successful();     // true
-$response->data();           // nodo data del JSON
-$response['data']['status']; // acceso tipo array
+$response->status();         // 200
+$response->data();           // the JSON `data` node
+$response['data']['status']; // array-style access
 $response->json('data.messageId');
+$response->body();           // raw body — binary for messageMedia()
+$response->header('retry-after');
 ```
 
-### Envío masivo
+### Bulk sending
 
 ```php
 $batch = Sendify::BulkMessages([
-    '5215551234567' => 'Hola Ana',
-    '5215559876543' => 'Hola Luis',
+    '5215551234567' => 'Hi Ana',
+    '5215559876543' => 'Hi Luis',
 ]);
 
-Sendify::batch($batch->json('id'));   // avance
+Sendify::batch($batch->json('id'));         // progress
 Sendify::cancelBatch($batch->json('id'));
 ```
 
-### Acciones sobre mensajes
+The long form is accepted too, in case two recipients share a number:
 
 ```php
-Sendify::replyTo('5215551234567', $messageId, 'Claro que sí');
+Sendify::BulkMessages([
+    ['chatId' => '5215551234567', 'text' => 'Hi Ana'],
+    ['chatId' => '5215559876543', 'text' => 'Hi Luis'],
+]);
+```
+
+### Message actions
+
+```php
+Sendify::replyTo('5215551234567', $messageId, 'Of course');
 Sendify::forwardTo('5215559876543', $messageId);
 Sendify::react($messageId, '👍');
-Sendify::editMessage($messageId, 'Texto corregido');
+Sendify::editMessage($messageId, 'Fixed text');
 Sendify::deleteMessage($messageId);
-Sendify::pinMessage($messageId, 86400);
+Sendify::pinMessage($messageId, 86400);   // 86400, 604800 or 2592000 seconds
+Sendify::unpinMessage($messageId);
 Sendify::starMessage($messageId);
+Sendify::starMessage($messageId, false);  // unstar
 
 Sendify::messages(['chatId' => '5215551234567', 'limit' => 50]);
-Sendify::messageMedia($messageId)->body(); // binario del adjunto
+Sendify::messageReactions($messageId);
+Sendify::messageMedia($messageId)->body(); // raw attachment bytes
 ```
 
-### Estado de la instancia
+`messages()` accepts `chatId`, `direction`, `type`, `status`, `search`, `page` and `limit`.
 
-`Sendify::Status()` es el diagnóstico completo y **nunca lanza excepciones**: si el servidor está
-caído, la instancia no existe o la cuenta está suspendida, eso mismo es el estado.
+## Instance status
+
+`Sendify::Status()` is the full diagnosis and **never throws**: if the server is down, the instance
+does not exist, or the account is suspended, that is the status itself.
 
 ```php
-$estado = Sendify::Status();
+$status = Sendify::Status();
 
-$estado->state;            // EverestHome\Sendify\Enums\InstanceState::Suspended
-$estado->value();          // 'suspended'
-$estado->message;          // 'Cuenta suspendida: instancia desactivada o API key revocada'
-$estado->canSend();        // false
-$estado->accountProblem(); // true
-$estado->httpStatus;       // 401
+$status->state;            // EverestHome\Sendify\Enums\InstanceState::Suspended
+$status->value();          // 'suspended'
+$status->message;          // human-readable message (see note below)
+$status->canSend();        // false
+$status->accountProblem(); // true
+$status->httpStatus;       // 401
 ```
 
-| `state`               | Qué pasó                                                              | `canSend()` |
-| --------------------- | --------------------------------------------------------------------- | ----------- |
-| `connected`           | Conectada a WhatsApp                                                  | sí          |
-| `connecting`          | Levantando el socket                                                  | no          |
-| `qr_ready`            | Hay un QR esperando a que lo escaneen                                 | no          |
-| `hibernated`          | Dormida para no gastar RAM; el envío la despierta sola                | sí          |
-| `disconnected`        | Vinculada pero sin conexión                                           | no          |
-| `unlinked`            | Nunca se vinculó el teléfono o se cerró la sesión: hay que escanear   | no          |
-| `instance_not_found`  | La instancia no existe o la API key no pertenece a ella (403/404)     | no          |
-| `suspended`           | Instancia desactivada o API key revocada (401)                        | no          |
-| `key_expired`         | API key expirada: renovación o cobro pendiente (401)                  | no          |
-| `missing_credentials` | No se mandó API key (401)                                             | no          |
-| `ip_not_allowed`      | La IP de este servidor no está en la lista blanca de la key (403)     | no          |
-| `insufficient_role`   | La API key existe pero su rol no alcanza (403)                        | no          |
-| `rate_limited`        | Se topó el límite de peticiones por minuto (429)                      | no          |
-| `unreachable`         | El servidor Sendify no contestó: caído, DNS, TLS o timeout            | no          |
-| `server_error`        | El servidor Sendify respondió 5xx                                     | no          |
+| `state`               | What happened                                                       | `canSend()` |
+| --------------------- | ------------------------------------------------------------------- | ----------- |
+| `connected`           | Connected to WhatsApp                                               | yes         |
+| `connecting`          | Bringing the socket up                                              | no          |
+| `qr_ready`            | A QR code is waiting to be scanned                                  | no          |
+| `hibernated`          | Asleep to save RAM; sending wakes it up automatically               | yes         |
+| `disconnected`        | Linked but not connected                                            | no          |
+| `unlinked`            | The phone was never linked or the session was closed: scan a QR     | no          |
+| `instance_not_found`  | The instance does not exist or the API key does not own it (403/404)| no          |
+| `suspended`           | Instance deactivated or API key revoked (401)                       | no          |
+| `key_expired`         | API key expired: renewal or payment pending (401)                   | no          |
+| `missing_credentials` | No API key was sent (401)                                           | no          |
+| `ip_not_allowed`      | This server's IP is not in the key's allowlist (403)                | no          |
+| `insufficient_role`   | The API key exists but its role is not enough (403)                 | no          |
+| `rate_limited`        | The per-minute request limit was hit (429)                          | no          |
+| `unreachable`         | The Sendify server did not answer: down, DNS, TLS or timeout        | no          |
+| `server_error`        | The Sendify server answered 5xx                                     | no          |
 
 ```php
 use EverestHome\Sendify\Enums\InstanceState;
 
-$estado = Sendify::Status();
+$status = Sendify::Status();
 
-if ($estado->canSend()) {
-    Sendify::TextMessageTo($telefono, $texto);
-} elseif ($estado->accountProblem()) {
-    // suspendida, key expirada, IP bloqueada o instancia inexistente
-    Notification::route('mail', 'admin@miempresa.mx')->notify(new SendifyCaido($estado->message));
-} elseif ($estado->is(InstanceState::QrReady, InstanceState::Unlinked)) {
-    // alguien tiene que escanear el QR: Sendify::qr()
+if ($status->canSend()) {
+    Sendify::TextMessageTo($phone, $text);
+} elseif ($status->accountProblem()) {
+    // suspended, expired key, blocked IP or missing instance
+    Notification::route('mail', 'admin@mycompany.com')->notify(new SendifyDown($status->message));
+} elseif ($status->is(InstanceState::QrReady, InstanceState::Unlinked)) {
+    // someone has to scan the QR: Sendify::qr()
 }
 ```
 
-Otros atajos: `->connected()`, `->hibernated()`, `->suspended()`, `->needsAttention()`,
-`->needsStart()`, `->hasCredentials()`, `->hibernationReason()`, `->instanceName()`,
-`->business()`, `->lastConnectionAt()`, `->lastActiveAt()`, `->toArray()`. También se serializa a
-JSON y se lee como array (`$estado['state']`).
+Other shortcuts: `->connected()`, `->hibernated()`, `->suspended()`, `->needsAttention()`,
+`->needsStart()`, `->hasCredentials()`, `->hibernationReason()`, `->hibernatedAt()`,
+`->instanceId()`, `->instanceName()`, `->business()`, `->lastConnectionAt()`, `->lastActiveAt()`,
+`->toArray()`. `Status` is also JSON-serializable, readable as an array (`$status['state']`) and
+castable to string (`"suspended: ..."`).
 
-Para el avance de una vinculación: `->connecting()`, `->reconnecting()` (ya hay un reintento
-programado, no está ociosa), `->reconnectAttempts()`, `->qrAttempt()`, `->maxQrCycles()` y
-`->qrExpiresAt()`.
+To follow the progress of a linking attempt: `->connecting()`, `->reconnecting()` (a retry is
+already scheduled — it is not idle), `->reconnectAttempts()`, `->qrAttempt()`, `->maxQrCycles()`
+and `->qrExpiresAt()`.
 
-`hibernatedAt` y `hibernationReason` sólo vienen mientras la instancia está realmente dormida. Una
-que nunca se vinculó, o cuyo `logout()` borró la sesión, reporta `disconnected` sin credenciales, y
-el cliente la traduce a `unlinked`.
+`hibernatedAt` and `hibernationReason` are only present while the instance is genuinely asleep. An
+instance that was never linked, or whose `logout()` wiped the session, reports `disconnected`
+without credentials, and the client translates that into `unlinked`.
 
-Para distinguir "servidor caído" de "problema de esta cuenta" está `Sendify::serverReachable()`
-(pega a `/health`, sin API key de por medio). `Sendify::healthLive()` es la sonda de vida: contesta
-200 mientras el proceso viva aunque la base de datos esté caída — `health()` sí revisa la base y da
-503 si no la alcanza. Y si prefieres el JSON crudo con excepciones, `Sendify::statusResponse()`.
+To tell "server down" apart from "problem with this account" there is `Sendify::serverReachable()`
+(hits `/health`, no API key involved). `Sendify::healthLive()` is the liveness probe: it answers
+200 as long as the process is alive even if the database is down — `health()` does check the
+database and returns 503 when it cannot reach it. And if you prefer the raw JSON with exceptions,
+use `Sendify::statusResponse()`.
 
-### Instancia
+> **Note:** `$status->message` and `InstanceState::label()` currently ship in Spanish, since they
+> mirror the messages returned by the service. Use `$status->value()` or the `InstanceState` enum
+> if you need a stable, language-independent value.
+
+## Instance lifecycle
 
 ```php
 Sendify::connected();   // bool
-Sendify::qr();          // { qr, qrExpiresAt, qrAttempt } — cada QR vive 60 s
-Sendify::start();       // abre socket o emite un QR nuevo
-Sendify::stop();        // hiberna, conservando la sesión
+Sendify::qr();          // { qr, qrExpiresAt, qrAttempt } — each QR lives 60 s
+Sendify::start();       // opens the socket or emits a fresh QR
+Sendify::stop();        // hibernates, keeping the session
 Sendify::hibernate();
 Sendify::wake();
-Sendify::logout();      // desvincula el teléfono y BORRA la sesión
+Sendify::logout();      // unlinks the phone and DELETES the session
 Sendify::forceKill();
 Sendify::pairingCode('5215551234567');
 Sendify::config();
@@ -222,43 +308,62 @@ Sendify::updateConfig(['idleTimeoutMs' => 900000, 'wakeTimeoutMs' => 8000]);
 Sendify::stats();
 ```
 
-Roles de la API key: `read-only` lee estado, historial y stats; `operator` además envía, actúa sobre
-mensajes y puede `wake()`; `admin` además maneja ciclo de vida, config, webhooks, plantillas,
-automatizaciones y perfil. Leer el QR no arranca nada: si la instancia duerme, `qr()` responde
-`qr: null` y `needsStart: true` hasta que llames a `start()`.
+`updateConfig()` accepts `hibernationEnabled`, `idleTimeoutMs`, `wakeTimeoutMs`, `maxQrCycles`,
+`syncFullHistory`, `active`, `autoReconnect`, `maxReconnectAttempts` and `reconnectDelayMs`.
 
-Los IDs de grupo (`...@g.us`) salen de `GET /api/management/instances/:id/groups`, que va con sesión
-del panel y no con API key, así que ese endpoint no está en este cliente.
+API key roles: `read-only` reads status, history and stats; `operator` also sends, acts on messages
+and can call `wake()`; `admin` also manages the lifecycle, config, webhooks, templates, automations
+and profile. Reading the QR does not start anything: if the instance is asleep, `qr()` answers
+`qr: null` and `needsStart: true` until you call `start()`.
 
-### Webhooks, plantillas, automatizaciones y perfil
+Group IDs (`...@g.us`) come from `GET /api/management/instances/:id/groups`, which uses a panel
+session instead of an API key, so that endpoint is not part of this client.
+
+## Webhooks, templates, automations, profile and statuses
 
 ```php
-$webhook = Sendify::webhooks()->create('CRM', 'https://crm.miempresa.mx/sendify', [
+$webhook = Sendify::webhooks()->create('CRM', 'https://crm.mycompany.com/sendify', [
     'message.received', 'message.sent', 'message.status', 'connection.updated',
 ]);
 
-$secret = $webhook->json('secret'); // se muestra una sola vez
+$secret = $webhook->json('secret'); // shown only once
 
-Sendify::templates()->create('bienvenida', 'Hola {{nombre}}, gracias por escribir.');
+Sendify::webhooks()->all();
+Sendify::webhooks()->test($webhookId);
+Sendify::webhooks()->update($webhookId, ['active' => false]);
+Sendify::webhooks()->delete($webhookId);
+Sendify::webhooks()->deliveries(['status' => 'failed']);
+
+Sendify::templates()->create('welcome', 'Hi {{name}}, thanks for writing.');
+Sendify::templates()->all();
+Sendify::templates()->update($templateId, ['active' => false]);
+Sendify::templates()->delete($templateId);
 
 Sendify::automations()->create(
-    name: 'Horario',
+    name: 'Business hours',
     triggerType: 'message.received',
-    conditions: ['contains' => 'horario'],
+    conditions: ['contains' => 'hours'],
     actionType: 'send_text',
-    actionPayload: ['text' => 'Atendemos de 9:00 a 18:00.'],
+    actionPayload: ['text' => 'We are open from 9:00 to 18:00.'],
 );
 
-Sendify::profile()->name('Soporte Everest Home');
-Sendify::statuses()->text('Estamos en línea', backgroundColor: '#25D366');
+Sendify::profile()->name('Everest Home Support');
+Sendify::profile()->status('Always online');       // the profile "about" text
+Sendify::profile()->picture(public_path('logo.png'));
+Sendify::profile()->removePicture();
+
+Sendify::statuses()->text('We are online', backgroundColor: '#25D366');
+Sendify::statuses()->media('image', public_path('promo.jpg'), 'This week only');
+Sendify::statuses()->all();
+Sendify::statuses()->delete($messageId);
 ```
 
-Eventos disponibles (`EverestHome\Sendify\Resources\Webhooks::EVENTS`): `message.received`,
-`message.sent`, `message.status`, `connection.updated`, `call.received`. Usa `['*']` para recibir
-todo. Las entregas fallidas se reintentan 5 veces con retroceso exponencial (`2^intentos × 15 s`) y
-quedan en `Sendify::webhooks()->deliveries()`.
+Available events (`EverestHome\Sendify\Resources\Webhooks::EVENTS`): `message.received`,
+`message.sent`, `message.status`, `connection.updated`, `call.received`. Use `['*']` to receive
+everything. Failed deliveries are retried 5 times with exponential backoff (`2^attempts × 15 s`)
+and end up in `Sendify::webhooks()->deliveries()`.
 
-Para validar la firma de una entrega en tu controlador de Laravel:
+To validate a delivery's signature in your Laravel controller:
 
 ```php
 use EverestHome\Sendify\Resources\Webhooks;
@@ -268,9 +373,11 @@ if (! Webhooks::verifySignature($request->getContent(), $request->header('X-Send
 }
 ```
 
-## Varias instancias o varios servidores
+Webhooks, automations and profile calls require an `admin` API key.
 
-Cada empresa puede tener su propio servidor Sendify. Agrega conexiones en `config/sendify.php`:
+## Multiple instances or servers
+
+Each company can run its own Sendify server. Add connections in `config/sendify.php`:
 
 ```php
 'connections' => [
@@ -279,25 +386,25 @@ Cada empresa puede tener su propio servidor Sendify. Agrega conexiones en `confi
         'client' => env('SENDIFY_CLIENT'),
         'instance' => env('SENDIFY_INSTANCE'),
     ],
-    'cobranza' => [
-        'url' => env('SENDIFY_COBRANZA_URL'),
-        'client' => env('SENDIFY_COBRANZA_CLIENT'),
-        'instance' => env('SENDIFY_COBRANZA_INSTANCE'),
+    'billing' => [
+        'url' => env('SENDIFY_BILLING_URL'),
+        'client' => env('SENDIFY_BILLING_CLIENT'),
+        'instance' => env('SENDIFY_BILLING_INSTANCE'),
     ],
 ],
 ```
 
 ```php
-Sendify::connection('cobranza')->TextMessageTo('5215551234567', 'Recordatorio de pago');
+Sendify::connection('billing')->TextMessageTo('5215551234567', 'Payment reminder');
 ```
 
-Misma API key, otra instancia:
+Same API key, different instance:
 
 ```php
-Sendify::instance('soporte')->TextMessageTo('5215551234567', 'Hola');
+Sendify::instance('support')->TextMessageTo('5215551234567', 'Hi');
 ```
 
-Credenciales que viven en la base de datos (multi-tenant):
+Credentials that live in the database (multi-tenant):
 
 ```php
 use EverestHome\Sendify\SendifyManager;
@@ -308,30 +415,34 @@ $sendify = app(SendifyManager::class)->build([
     'instance' => $tenant->sendify_instance,
 ]);
 
-$sendify->TextMessageTo($cliente->telefono, 'Hola');
+$sendify->TextMessageTo($customer->phone, 'Hi');
 ```
 
-## Errores
+`build()` inherits `timeout`, `connect_timeout`, `retries` and `verify_ssl` from
+`config/sendify.php` unless you override them in the array.
 
-Toda respuesta fuera del rango 2xx lanza una excepción que hereda de `SendifyException`:
+## Error handling
 
-| Excepción                       | Cuándo                                                             |
-| ------------------------------- | ------------------------------------------------------------------ |
-| `AuthenticationException`       | 401/403: API key inválida, expirada, IP no permitida               |
-| `ValidationException`           | 400/422: faltan campos o el número no es válido                    |
-| `NotFoundException`             | 404: plantilla, lote o mensaje inexistente                         |
-| `InstanceNotConnectedException` | 409: la instancia no está conectada a WhatsApp                     |
-| `RateLimitException`            | 429: se topó el límite de peticiones de la key                     |
-| `InstanceAsleepException`       | 503: hibernando, no despertó a tiempo (`retryAfter()`)             |
-| `ConnectionException`           | No hubo respuesta: DNS, TLS, timeout                               |
+Any response outside the 2xx range throws an exception extending `SendifyException`:
 
-Las respuestas 503 reintentables y las 429 se reintentan solas según `SENDIFY_RETRIES`, esperando lo
-que indique el header `Retry-After`.
+| Exception                       | When                                                                |
+| ------------------------------- | ------------------------------------------------------------------- |
+| `AuthenticationException`       | 401/403: invalid or expired API key, IP not allowed                 |
+| `ValidationException`           | 400/422: missing fields, invalid number, or media over 25 MB        |
+| `NotFoundException`             | 404: template, batch or message does not exist                      |
+| `InstanceNotConnectedException` | 409: the instance is not connected to WhatsApp                      |
+| `RateLimitException`            | 429: the key's request limit was hit                                |
+| `InstanceAsleepException`       | 503: hibernating, did not wake up in time (`retryAfter()`)          |
+| `ConnectionException`           | No response at all: DNS, TLS, timeout                               |
+| `ConfigurationException`        | Missing credentials or an unknown connection name                   |
 
-En un 422 el servicio manda los errores por campo; `$e->errors()` te los da tal cual:
+Retryable 503 responses and 429s are retried automatically according to `SENDIFY_RETRIES`, waiting
+as long as the `Retry-After` header asks for (capped between 1 and 30 seconds).
+
+On a 422 the service returns per-field errors; `$e->errors()` hands them back as-is:
 
 ```php
-[['field' => 'chatId', 'rule' => 'required', 'message' => 'El campo chatId es obligatorio']]
+[['field' => 'chatId', 'rule' => 'required', 'message' => 'chatId is required']]
 ```
 
 ```php
@@ -339,39 +450,54 @@ use EverestHome\Sendify\Exceptions\InstanceAsleepException;
 use EverestHome\Sendify\Exceptions\SendifyException;
 
 try {
-    Sendify::TextMessageTo($telefono, $texto);
+    Sendify::TextMessageTo($phone, $text);
 } catch (InstanceAsleepException $e) {
-    SendWhatsApp::dispatch($telefono, $texto)->delay(now()->addSeconds($e->retryAfter()));
+    SendWhatsApp::dispatch($phone, $text)->delay(now()->addSeconds($e->retryAfter()));
 } catch (SendifyException $e) {
     report($e);
 }
 ```
 
-Como todo lanza excepciones, en una cola de Laravel el reintento del job sale gratis.
+Since everything throws, job retries on a Laravel queue come for free.
 
-## Sin Laravel
+## Using it without Laravel
 
 ```php
 use EverestHome\Sendify\Sendify;
 
-$sendify = Sendify::make('https://sendify.miempresa.mx', 'snd_live_xxx', 'ventas');
+$sendify = Sendify::make('https://sendify.mycompany.com', 'snd_live_xxx', 'sales');
 
-$sendify->textMessageTo('5215551234567', 'Hola desde PHP puro');
+$sendify->textMessageTo('5215551234567', 'Hello from plain PHP');
 ```
 
-Para usar otro cliente HTTP (Guzzle, el de Laravel, etc.) implementa
-`EverestHome\Sendify\Http\ClientInterface` y pásalo con `$sendify->withHttpClient($cliente)` o enlázalo
-en el contenedor de Laravel.
+`make()` takes an optional fourth argument with the same HTTP options as the config file:
 
-## Pruebas
+```php
+$sendify = Sendify::make($url, $key, $instance, [
+    'timeout' => 15,
+    'retries' => 2,
+    'verify_ssl' => false,
+]);
+```
+
+To use another HTTP client (Guzzle, Laravel's, etc.) implement
+`EverestHome\Sendify\Http\ClientInterface` and pass it with `$sendify->withHttpClient($client)`, or
+bind it in the Laravel container.
+
+## Testing
 
 ```bash
 composer install
-composer test
+composer test        # Pest
+composer analyse     # PHPStan
+composer format      # PHP-CS-Fixer
 ```
 
-Las pruebas usan un cliente HTTP falso; no tocan la red ni requieren un Sendify corriendo.
+The test suite uses a fake HTTP client, so it never touches the network and does not need a running
+Sendify server. In your own tests, do the same: implement `ClientInterface` with canned responses
+and bind it in the container — the service provider resolves the HTTP client through that
+interface.
 
-## Licencia
+## License
 
-MIT. Ver [LICENSE.md](LICENSE.md).
+MIT. See [LICENSE.md](LICENSE.md).
