@@ -1,0 +1,68 @@
+{
+    "name": "everesthome/sendify",
+    "description": "PHP client and Laravel integration for the Sendify WhatsApp service",
+    "keywords": [
+        "everesthome",
+        "sendify",
+        "whatsapp",
+        "laravel",
+        "api-client"
+    ],
+    "homepage": "https://github.com/everesthome/sendify-php",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Jovan Lopez",
+            "email": "everest.studio32@gmail.com",
+            "role": "Developer"
+        }
+    ],
+    "require": {
+        "php": "^8.1",
+        "ext-curl": "*",
+        "ext-json": "*"
+    },
+    "require-dev": {
+        "friendsofphp/php-cs-fixer": "^3.49",
+        "illuminate/support": "^10.0|^11.0|^12.0",
+        "pestphp/pest": "^2.34|^3.0",
+        "phpstan/phpstan": "^1.10|^2.0"
+    },
+    "suggest": {
+        "illuminate/support": "Required to use the Laravel service provider and the Sendify facade"
+    },
+    "autoload": {
+        "psr-4": {
+            "EverestHome\\Sendify\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "EverestHome\\Sendify\\Tests\\": "tests/"
+        }
+    },
+    "scripts": {
+        "test": "vendor/bin/pest",
+        "test-coverage": "vendor/bin/pest --coverage",
+        "format": "vendor/bin/php-cs-fixer fix",
+        "analyse": "vendor/bin/phpstan analyse"
+    },
+    "config": {
+        "sort-packages": true,
+        "allow-plugins": {
+            "pestphp/pest-plugin": true
+        }
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "EverestHome\\Sendify\\Laravel\\SendifyServiceProvider"
+            ],
+            "aliases": {
+                "Sendify": "EverestHome\\Sendify\\Laravel\\Facades\\Sendify"
+            }
+        }
+    },
+    "minimum-stability": "dev",
+    "prefer-stable": true
+}
