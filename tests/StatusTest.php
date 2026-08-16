@@ -242,3 +242,57 @@ it('reporta reconexión en curso', function () {
         ->and($status->reconnecting())->toBeTrue()
         ->and($status->connecting())->toBeTrue();
 });
+
+/*
+ * Los cuerpos de abajo se capturaron del servicio real corriendo, no se
+ * inventaron: son la defensa contra que la API cambie y el paquete no.
+ */
+
+it('trata la instancia desactivada como cuenta suspendida aunque la key sea válida', function () {
+    // Desactivar una instancia bloquea todas sus keys, incluidas las scoped.
+    $client = (new FakeClient())->push(401, [
+        'success' => false,
+        'error' => 'La instancia está desactivada',
+    ]);
+
+    [$sendify] = sendify($client);
+
+    $status = $sendify->Status();
+
+    expect($status->state)->toBe(InstanceState::Suspended)
+        ->and($status->suspended())->toBeTrue()
+        ->and($status->accountProblem())->toBeTrue()
+        ->and($status->canSend())->toBeFalse();
+});
+
+it('traduce el rechazo 409 de un envío a una instancia desconectada', function () {
+    $client = (new FakeClient())->push(409, [
+        'success' => false,
+        'error' => 'La instancia 1 no está conectada a WhatsApp: no hay sesión vinculada, escanea el QR',
+    ]);
+
+    [$sendify] = sendify($client);
+
+    try {
+        $sendify->to('5215551234567')->text('hola');
+        $this->fail('El envío debió lanzar una excepción.');
+    } catch (EverestHome\Sendify\Exceptions\InstanceNotConnectedException $exception) {
+        $status = EverestHome\Sendify\Status::fromException($exception);
+
+        expect($status->state)->toBe(InstanceState::Disconnected)
+            ->and($status->needsAttention())->toBeTrue()
+            ->and($status->canSend())->toBeFalse();
+    }
+});
+
+it('reporta el rechazo de una URL privada como error de validación', function () {
+    $client = (new FakeClient())->push(400, [
+        'success' => false,
+        'error' => 'La URL del archivo apunta a una dirección privada; usa un enlace público',
+    ]);
+
+    [$sendify] = sendify($client);
+
+    expect(fn () => $sendify->to('5215551234567')->image('https://ejemplo.mx/foto.png'))
+        ->toThrow(EverestHome\Sendify\Exceptions\ValidationException::class, 'dirección privada');
+});

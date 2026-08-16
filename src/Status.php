@@ -87,6 +87,10 @@ final class Status implements ArrayAccess, JsonSerializable, Stringable
             $httpStatus === 403 && self::matches($error, '/no pertenece/i') => InstanceState::InstanceNotFound,
             $httpStatus === 403 => InstanceState::InsufficientRole,
             $httpStatus === 404 => InstanceState::InstanceNotFound,
+            // Un 409 es una instancia registrada que no está conectada. Sin
+            // este caso, Status::fromException() de un envío rechazado —el
+            // fallo más común— contestaba "desconocido".
+            $httpStatus === 409 => InstanceState::Disconnected,
             $httpStatus === 429 => InstanceState::RateLimited,
             $httpStatus === 503 && $response?->retryable() === true => InstanceState::Hibernated,
             $httpStatus !== null && $httpStatus >= 500 => InstanceState::ServerError,
