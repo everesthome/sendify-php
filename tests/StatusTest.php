@@ -183,3 +183,62 @@ it('consulta la salud del servidor sin API key', function () {
         ->and($client->lastRequest()['url'])->toBe('https://sendify.test/health')
         ->and($client->lastRequest()['headers'])->not->toHaveKey('X-API-Key');
 });
+
+it('expone los campos nuevos del snapshot', function () {
+    $client = (new FakeClient())->push(200, [
+        'status' => 'qr_ready',
+        'hasCredentials' => false,
+        'reconnecting' => false,
+        'connecting' => false,
+        'reconnectAttempts' => 2,
+        'qrExpiresAt' => '2026-08-16T21:49:39.000-06:00',
+        'qrAttempt' => 1,
+        'maxQrCycles' => 4,
+        'lastActiveAt' => '2026-08-16T21:40:00.000-06:00',
+        'business' => ['id' => 7, 'name' => 'Everest Home'],
+    ]);
+
+    [$sendify] = sendify($client);
+
+    $status = $sendify->Status();
+
+    expect($status->qrAttempt())->toBe(1)
+        ->and($status->maxQrCycles())->toBe(4)
+        ->and($status->qrExpiresAt())->toBe('2026-08-16T21:49:39.000-06:00')
+        ->and($status->reconnectAttempts())->toBe(2)
+        ->and($status->reconnecting())->toBeFalse()
+        ->and($status->lastActiveAt())->toBe('2026-08-16T21:40:00.000-06:00')
+        ->and($status->business()['name'])->toBe('Everest Home');
+});
+
+it('trata como no vinculada la instancia desconectada sin credenciales', function () {
+    $client = (new FakeClient())->push(200, [
+        'status' => 'disconnected',
+        'hasCredentials' => false,
+        'hibernatedAt' => null,
+        'hibernationReason' => null,
+        'needsStart' => true,
+    ]);
+
+    [$sendify] = sendify($client);
+
+    expect($sendify->Status()->state)->toBe(EverestHome\Sendify\Enums\InstanceState::Unlinked);
+});
+
+it('reporta reconexión en curso', function () {
+    $client = (new FakeClient())->push(200, [
+        'status' => 'connecting',
+        'hasCredentials' => true,
+        'reconnecting' => true,
+        'connecting' => true,
+        'reconnectAttempts' => 3,
+    ]);
+
+    [$sendify] = sendify($client);
+
+    $status = $sendify->Status();
+
+    expect($status->state)->toBe(EverestHome\Sendify\Enums\InstanceState::Connecting)
+        ->and($status->reconnecting())->toBeTrue()
+        ->and($status->connecting())->toBeTrue();
+});

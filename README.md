@@ -1,7 +1,14 @@
 # Sendify para PHP y Laravel
 
-Cliente del servicio [Sendify](https://github.com/everesthome/sendify-service) para mandar WhatsApp desde
-cualquier aplicación PHP. En Laravel se instala, se ponen tres claves en el `.env` y ya:
+[![Packagist](https://img.shields.io/packagist/v/everesthome/sendify.svg)](https://packagist.org/packages/everesthome/sendify)
+[![Tests](https://github.com/everesthome/sendify-php/actions/workflows/run-tests.yml/badge.svg)](https://github.com/everesthome/sendify-php/actions/workflows/run-tests.yml)
+[![Descargas](https://img.shields.io/packagist/dt/everesthome/sendify.svg)](https://packagist.org/packages/everesthome/sendify)
+[![Licencia](https://img.shields.io/packagist/l/everesthome/sendify.svg)](LICENSE.md)
+
+Paquete: **https://packagist.org/packages/everesthome/sendify**
+
+Cliente del servicio Sendify para mandar WhatsApp desde cualquier aplicación PHP. En Laravel se
+instala, se ponen tres claves en el `.env` y ya:
 
 ```php
 Sendify::TextMessageTo('5215551234567', 'Hola desde Laravel');
@@ -74,6 +81,15 @@ Sendify::to('5215551234567')->voiceNote(storage_path('app/audios/nota.ogg'));
 
 Cualquier método de medios acepta una URL pública, una ruta local (se lee y se manda en base64 con
 su mimetype), un `data:` URI o base64 crudo (aquí sí hay que pasar el `mimetype`).
+
+Dos reglas del servicio:
+
+- **25 MB** máximo por archivo en base64. El cliente lo revisa antes de subir nada y lanza
+  `ValidationException` para no gastar el viaje.
+- La **URL la descarga el servidor**, así que tiene que resolver a una dirección pública: `localhost`,
+  LAN privada, link-local (incluido `169.254.169.254`) y CGNAT se rechazan con `400`. Si tu servidor
+  de medios vive en la misma red privada que Sendify, el servicio tiene que correr con
+  `ALLOW_PRIVATE_MEDIA_URLS=true`.
 
 ```php
 Sendify::VideoMessageTo('5215551234567', public_path('videos/demo.mp4'), 'Demo');
@@ -173,35 +189,52 @@ if ($estado->canSend()) {
 
 Otros atajos: `->connected()`, `->hibernated()`, `->suspended()`, `->needsAttention()`,
 `->needsStart()`, `->hasCredentials()`, `->hibernationReason()`, `->instanceName()`,
-`->lastConnectionAt()`, `->toArray()`. También se serializa a JSON y se lee como array
-(`$estado['state']`).
+`->business()`, `->lastConnectionAt()`, `->lastActiveAt()`, `->toArray()`. También se serializa a
+JSON y se lee como array (`$estado['state']`).
+
+Para el avance de una vinculación: `->connecting()`, `->reconnecting()` (ya hay un reintento
+programado, no está ociosa), `->reconnectAttempts()`, `->qrAttempt()`, `->maxQrCycles()` y
+`->qrExpiresAt()`.
+
+`hibernatedAt` y `hibernationReason` sólo vienen mientras la instancia está realmente dormida. Una
+que nunca se vinculó, o cuyo `logout()` borró la sesión, reporta `disconnected` sin credenciales, y
+el cliente la traduce a `unlinked`.
 
 Para distinguir "servidor caído" de "problema de esta cuenta" está `Sendify::serverReachable()`
-(pega a `/health`, sin API key de por medio). Y si prefieres el JSON crudo con excepciones,
-`Sendify::statusResponse()`.
+(pega a `/health`, sin API key de por medio). `Sendify::healthLive()` es la sonda de vida: contesta
+200 mientras el proceso viva aunque la base de datos esté caída — `health()` sí revisa la base y da
+503 si no la alcanza. Y si prefieres el JSON crudo con excepciones, `Sendify::statusResponse()`.
 
 ### Instancia
 
 ```php
 Sendify::connected();   // bool
-Sendify::qr();          // código QR vigente
-Sendify::start();
-Sendify::stop();
+Sendify::qr();          // { qr, qrExpiresAt, qrAttempt } — cada QR vive 60 s
+Sendify::start();       // abre socket o emite un QR nuevo
+Sendify::stop();        // hiberna, conservando la sesión
 Sendify::hibernate();
 Sendify::wake();
+Sendify::logout();      // desvincula el teléfono y BORRA la sesión
+Sendify::forceKill();
 Sendify::pairingCode('5215551234567');
 Sendify::config();
 Sendify::updateConfig(['idleTimeoutMs' => 900000, 'wakeTimeoutMs' => 8000]);
 Sendify::stats();
 ```
 
-Las rutas de ciclo de vida piden una API key con rol `admin`; los envíos, una de rol `operator`.
+Roles de la API key: `read-only` lee estado, historial y stats; `operator` además envía, actúa sobre
+mensajes y puede `wake()`; `admin` además maneja ciclo de vida, config, webhooks, plantillas,
+automatizaciones y perfil. Leer el QR no arranca nada: si la instancia duerme, `qr()` responde
+`qr: null` y `needsStart: true` hasta que llames a `start()`.
+
+Los IDs de grupo (`...@g.us`) salen de `GET /api/management/instances/:id/groups`, que va con sesión
+del panel y no con API key, así que ese endpoint no está en este cliente.
 
 ### Webhooks, plantillas, automatizaciones y perfil
 
 ```php
 $webhook = Sendify::webhooks()->create('CRM', 'https://crm.miempresa.mx/sendify', [
-    'message.received', 'message.status', 'connection.updated',
+    'message.received', 'message.sent', 'message.status', 'connection.updated',
 ]);
 
 $secret = $webhook->json('secret'); // se muestra una sola vez
@@ -219,6 +252,11 @@ Sendify::automations()->create(
 Sendify::profile()->name('Soporte Everest Home');
 Sendify::statuses()->text('Estamos en línea', backgroundColor: '#25D366');
 ```
+
+Eventos disponibles (`EverestHome\Sendify\Resources\Webhooks::EVENTS`): `message.received`,
+`message.sent`, `message.status`, `connection.updated`, `call.received`. Usa `['*']` para recibir
+todo. Las entregas fallidas se reintentan 5 veces con retroceso exponencial (`2^intentos × 15 s`) y
+quedan en `Sendify::webhooks()->deliveries()`.
 
 Para validar la firma de una entrega en tu controlador de Laravel:
 
@@ -289,6 +327,12 @@ Toda respuesta fuera del rango 2xx lanza una excepción que hereda de `SendifyEx
 
 Las respuestas 503 reintentables y las 429 se reintentan solas según `SENDIFY_RETRIES`, esperando lo
 que indique el header `Retry-After`.
+
+En un 422 el servicio manda los errores por campo; `$e->errors()` te los da tal cual:
+
+```php
+[['field' => 'chatId', 'rule' => 'required', 'message' => 'El campo chatId es obligatorio']]
+```
 
 ```php
 use EverestHome\Sendify\Exceptions\InstanceAsleepException;

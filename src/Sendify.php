@@ -327,6 +327,27 @@ class Sendify
         return $response;
     }
 
+    /**
+     * Sonda de vida (GET /health/live): responde 200 mientras el proceso viva,
+     * aunque la base de datos esté caída. `health()` sí revisa la base y
+     * contesta 503 cuando no la alcanza.
+     */
+    public function healthLive(): Response
+    {
+        $response = $this->http->send(
+            $this->connection,
+            'GET',
+            $this->connection->url.'/health/live',
+            ['Accept' => 'application/json'],
+        );
+
+        if ($response->failed()) {
+            throw SendifyException::fromResponse($response);
+        }
+
+        return $response;
+    }
+
     /** ¿Está de pie el servidor Sendify? No mira la instancia ni la API key. */
     public function serverReachable(): bool
     {
@@ -362,6 +383,7 @@ class Sendify
         return $this->post('/wake');
     }
 
+    /** Desvincula el teléfono y **borra** la sesión: para volver, QR nuevo. */
     public function logout(): Response
     {
         return $this->post('/logout');
@@ -372,11 +394,18 @@ class Sendify
         return $this->post('/force-kill');
     }
 
-    /** Código QR vigente. Si la instancia duerme responde qr: null y needsStart: true. */
+    /**
+     * Código QR vigente: { qr, qrExpiresAt, qrAttempt }. Cada código vive 60
+     * segundos y los caducados nunca se sirven (`qr: null`); mientras el socket
+     * esté arriba llega uno nuevo solo. Leer el QR no arranca nada: si la
+     * instancia duerme responde `qr: null` y `needsStart: true` hasta que
+     * alguien llame a start().
+     */
     public function qr(): Response
     {
         return $this->get('/qr');
     }
+
 
     public function pairingCode(string $phoneNumber, ?string $customCode = null): Response
     {

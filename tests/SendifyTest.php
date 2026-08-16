@@ -167,3 +167,41 @@ it('valida la firma de un webhook', function () {
     expect(EverestHome\Sendify\Resources\Webhooks::verifySignature($payload, $signature, $secret))->toBeTrue()
         ->and(EverestHome\Sendify\Resources\Webhooks::verifySignature($payload, 'sha256=falsa', $secret))->toBeFalse();
 });
+
+it('rechaza un base64 de más de 25 MB antes de mandarlo', function () {
+    [$sendify, $client] = sendify();
+
+    $enorme = str_repeat('A', (int) (26 * 1024 * 1024 * 4 / 3));
+
+    expect(fn () => $sendify->documentMessageTo('5215551234567', $enorme, 'grande.pdf', null, 'application/pdf'))
+        ->toThrow(EverestHome\Sendify\Exceptions\ValidationException::class, 'límite de Sendify es 25 MB')
+        ->and($client->requests)->toBeEmpty();
+});
+
+it('lee los errores por campo de un 422', function () {
+    $client = (new FakeClient())->push(422, [
+        'success' => false,
+        'error' => 'Los datos enviados no son válidos',
+        'messages' => [
+            ['field' => 'chatId', 'rule' => 'required', 'message' => 'El campo chatId es obligatorio'],
+        ],
+    ]);
+
+    [$sendify] = sendify($client);
+
+    try {
+        $sendify->textMessageTo('5215551234567', 'Hola');
+        expect(false)->toBeTrue();
+    } catch (EverestHome\Sendify\Exceptions\ValidationException $e) {
+        expect($e->errors())->toHaveCount(1)
+            ->and($e->errors()[0]['field'])->toBe('chatId');
+    }
+});
+
+it('consulta la sonda de vida del servidor', function () {
+    [$sendify, $client] = sendify((new FakeClient())->push(200, ['status' => 'alive']));
+
+    $sendify->healthLive();
+
+    expect($client->lastRequest()['url'])->toBe('https://sendify.test/health/live');
+});

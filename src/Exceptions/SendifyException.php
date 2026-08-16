@@ -30,10 +30,15 @@ class SendifyException extends RuntimeException
         return $exception;
     }
 
-    /** Errores de validación devueltos por VineJS, si los hay. */
+    /**
+     * Errores por campo de un 422. El servicio los manda en `messages`, con el
+     * formato de VineJS: [{"field": "...", "rule": "...", "message": "..."}].
+     *
+     * @return array<int|string, mixed>
+     */
     public function errors(): array
     {
-        $errors = $this->response?->json('errors');
+        $errors = $this->response?->json('messages') ?? $this->response?->json('errors');
 
         return is_array($errors) ? $errors : [];
     }

@@ -39,6 +39,7 @@ use Illuminate\Support\Facades\Facade;
  * @method static \EverestHome\Sendify\Status status()
  * @method static \EverestHome\Sendify\Http\Response statusResponse()
  * @method static \EverestHome\Sendify\Http\Response health()
+ * @method static \EverestHome\Sendify\Http\Response healthLive()
  * @method static bool serverReachable()
  * @method static bool connected()
  * @method static \EverestHome\Sendify\Http\Response start()

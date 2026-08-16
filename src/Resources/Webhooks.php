@@ -10,6 +10,15 @@ use EverestHome\Sendify\Sendify;
 /** Requiere una API key con rol admin. */
 final class Webhooks
 {
+    /** Eventos que publica el servicio. `['*']` suscribe a todos. */
+    public const EVENTS = [
+        'message.received',
+        'message.sent',
+        'message.status',
+        'connection.updated',
+        'call.received',
+    ];
+
     public function __construct(private readonly Sendify $sendify)
     {
     }
@@ -23,7 +32,10 @@ final class Webhooks
      * El `secret` de la respuesta solo se muestra una vez: guárdalo para
      * verificar la firma X-Sendify-Signature.
      *
-     * @param array<int, string> $events message.received, message.status, connection.updated, call.received
+     * Las entregas fallidas se reintentan 5 veces con retroceso exponencial
+     * (2^intentos × 15 s).
+     *
+     * @param array<int, string> $events uno o varios de Webhooks::EVENTS, o ['*'] para todos
      */
     public function create(string $name, string $url, array $events, bool $active = true): Response
     {

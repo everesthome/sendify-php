@@ -8,6 +8,9 @@ use EverestHome\Sendify\Exceptions\ValidationException;
 
 final class Media
 {
+    /** El servicio rechaza cualquier base64 que pese más de 25 MB ya decodificado. */
+    public const MAX_BYTES = 25 * 1024 * 1024;
+
     /**
      * Convierte lo que se le pase en el cuerpo que espera el servicio.
      *
@@ -15,6 +18,10 @@ final class Media
      * - Ruta local      -> ["base64" => ..., "mimetype" => ..., "filename" => ...]
      * - data: URI       -> ["base64" => ..., "mimetype" => ...]
      * - base64 pelón    -> ["base64" => ...] (requiere $mimetype)
+     *
+     * La URL la descarga el servidor y debe resolver a una dirección pública:
+     * localhost, LAN privada, link-local y CGNAT se rechazan con 400 (salvo que
+     * el servicio corra con ALLOW_PRIVATE_MEDIA_URLS=true).
      *
      * @return array<string, string>
      */
@@ -52,6 +59,16 @@ final class Media
 
         if ($mimetype === null) {
             throw new ValidationException('mimetype es requerido cuando el medio se envía en base64.');
+        }
+
+        // Mejor fallar aquí que subir 30 MB para que el servicio los rechace.
+        $bytes = (int) floor(strlen(rtrim($source, '=')) * 3 / 4);
+
+        if ($bytes > self::MAX_BYTES) {
+            throw new ValidationException(sprintf(
+                'El archivo pesa %.1f MB y el límite de Sendify es 25 MB.',
+                $bytes / 1024 / 1024
+            ));
         }
 
         return array_filter([

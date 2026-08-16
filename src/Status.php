@@ -157,6 +157,46 @@ final class Status implements ArrayAccess, JsonSerializable, Stringable
         return ($this->details['hasCredentials'] ?? false) === true;
     }
 
+    /** Hay un reintento de conexión ya programado: no está ociosa. */
+    public function reconnecting(): bool
+    {
+        return ($this->details['reconnecting'] ?? false) === true;
+    }
+
+    /** El socket se está abriendo y todavía no llega ningún QR. */
+    public function connecting(): bool
+    {
+        return ($this->details['connecting'] ?? false) === true;
+    }
+
+    /** Fallos acumulados desde la última conexión buena. */
+    public function reconnectAttempts(): int
+    {
+        return (int) ($this->details['reconnectAttempts'] ?? 0);
+    }
+
+    /** Cuándo caduca el QR vigente (vive 60 segundos). */
+    public function qrExpiresAt(): ?string
+    {
+        $value = $this->details['qrExpiresAt'] ?? null;
+
+        return is_string($value) ? $value : null;
+    }
+
+    /** QR dibujados en este arranque. */
+    public function qrAttempt(): int
+    {
+        return (int) ($this->details['qrAttempt'] ?? 0);
+    }
+
+    /** Presupuesto de QR antes de hibernar; null si la hibernación está apagada. */
+    public function maxQrCycles(): ?int
+    {
+        $value = $this->details['maxQrCycles'] ?? null;
+
+        return is_int($value) ? $value : null;
+    }
+
     public function hibernationReason(): ?string
     {
         $reason = $this->details['hibernationReason'] ?? null;
@@ -182,6 +222,22 @@ final class Status implements ArrayAccess, JsonSerializable, Stringable
         $value = $this->details['lastConnectionAt'] ?? null;
 
         return is_string($value) ? $value : null;
+    }
+
+    /** Última actividad registrada, ISO 8601. */
+    public function lastActiveAt(): ?string
+    {
+        $value = $this->details['lastActiveAt'] ?? null;
+
+        return is_string($value) ? $value : null;
+    }
+
+    /** El negocio dueño de la instancia, tal cual lo serializa el servicio. */
+    public function business(): array
+    {
+        $business = $this->details['business'] ?? null;
+
+        return is_array($business) ? $business : [];
     }
 
     public function hibernatedAt(): ?string
