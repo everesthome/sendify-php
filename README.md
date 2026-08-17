@@ -49,6 +49,88 @@ The core is framework-agnostic — it only needs cURL and JSON.
 composer require everesthome/sendify
 ```
 
+LLM Prompt:
+
+```
+# Task: Integrate Sendify WhatsApp notifications (Laravel)
+
+Add WhatsApp notifications via https://github.com/everesthome/sendify-php when
+tasks are created, reassigned, and completed.
+
+## Install
+1. `composer require everesthome/sendify`
+2. Add EXACTLY these three vars to `.env` and `.env.example` — nothing else:
+   SENDIFY_URL, SENDIFY_CLIENT, SENDIFY_INSTANCE
+3. Do NOT run `vendor:publish`. The package ships its own config and reads the
+   env directly. Do NOT create config files or config toggles (enabled flags,
+   per-event switches, queue names, country-code settings). Hardcode constants
+   in the service class instead.
+
+## Architecture — 2 files, plus 2 lines in the model
+Create ONLY:
+- `app/Services/TaskWhatsAppNotifier.php` — builds the text and sends it
+- `app/Observers/TaskObserver.php` — decides when to fire
+
+Register with `#[ObservedBy(TaskObserver::class)]` on the model. Use a model
+observer, NOT edits to controllers: entities are usually created from several
+places (multiple panels/roles, series controllers, scheduled commands) and all
+of them must notify identically. Verify this by grepping for every `Model::create`
+call site before you start.
+
+## Send immediately — no queue
+Call `Sendify::textMessageTo()` directly inside the request. Do NOT create a Job,
+do NOT use `dispatch()`, do NOT touch queue config. A queued job silently does
+nothing until a worker runs, which reads as "the API is broken".
+
+Wrap the call in `try { } catch (SendifyException $e) { Log::warning(...); }` so a
+WhatsApp failure never breaks the save. Note the tradeoff in
+save now waits on the HTTP call (package default timeout 30s).
+
+## Observer rules
+- `created`: notify the assignee.
+- `updated`: use `wasChanged('assigned_to')` and `wasChanged('status')`. Only fire
+  on reassignment and on the transition INTO the completed s
+  timers/counters get written constantly — never notify on every update.
+- Actor is `auth()->user()`; it is NULL in console/seeder co
+  `?->` and fall back to a "System" label.
+
+## Notifier rules
+- Skip when actor === recipient. Nobody needs a WhatsApp for
+- Phone normalization: strip non-digits, drop a leading `00`, prepend the country
+  code when exactly 10 digits remain, reject anything under
+  phones are ACTUALLY stored first (`select phone from users limit 10`) — they are
+  usually free-text: "444 547 3439", "+1 (443) 665-4263".
+- No usable phone → `Log::info` and return. Never throw.
+- Missing API key → `Log::warning` and return. Never fail si
+  env looks identical to a broken integration and wastes hours in production.
+- Deep links must point at the recipient's own panel (admin
+  they land on a 403.
+- Message: bold title, then only the fields that are actuall
+
+## Hard constraints
+- NEVER modify migrations. If a migration blocks you, report it and stop.
+- NEVER run `migrate:reset`, `migrate:fresh`, `migrate:refre
+  destroy data, and seeders with fake phone numbers will send real WhatsApps to
+  strangers.
+- Do NOT create tests, artisan commands, or helper scripts unless asked.
+- Do NOT fix unrelated bugs you find. Report them and move o
+- Do NOT reformat files you touch; keep the diff to the lines you actually changed
+  (watch out for the linter reformatting a whole file).
+
+## Verify
+Create a real record via tinker with two users that have phones, then confirm
+delivery against the API itself, not just absence of errors:
+`Sendify::messages(['limit' => 10, 'direction' => 'outgoing'])`
+Timestamps must match record creation to the second (proves
+`Sendify::Status()` never throws — use it to check the instance is `connected`;
+`unlinked` means nobody has scanned the QR yet and nothing w
+
+## Deployment note for the summary
+`.env` is gitignored, so production needs the three vars added manually, then
+`php artisan config:clear && php artisan config:cache`, then
+Missing any of the three looks exactly like "the integration doesn't work".
+```
+
 On Laravel the service provider and the `Sendify` facade are auto-discovered. Publishing the
 configuration file is optional:
 
