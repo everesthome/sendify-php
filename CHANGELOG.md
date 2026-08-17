@@ -2,6 +2,12 @@
 
 Todos los cambios relevantes de `everesthome/sendify` se documentan aquí.
 
+## Unreleased
+
+### Added
+
+- `Status::phone()` and `Status::pushName()` expose the WhatsApp number and profile name currently paired to the instance.
+
 ## 1.1.0 - 2026-08-16
 
 - Al día con la API del servicio: `Status()` expone `reconnecting`, `connecting`,

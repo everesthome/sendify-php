@@ -15,6 +15,8 @@ it('reporta la instancia conectada', function () {
         'hasCredentials' => true,
         'needsStart' => false,
         'lastConnectionAt' => '2026-08-15T10:00:00.000-06:00',
+        'phone' => '5215512345678',
+        'pushName' => 'Ventas Everest',
     ]);
 
     [$sendify] = sendify($client);
@@ -26,7 +28,9 @@ it('reporta la instancia conectada', function () {
         ->and($status->canSend())->toBeTrue()
         ->and($status->accountProblem())->toBeFalse()
         ->and($status->instanceName())->toBe('ventas')
-        ->and($status->lastConnectionAt())->toBe('2026-08-15T10:00:00.000-06:00');
+        ->and($status->lastConnectionAt())->toBe('2026-08-15T10:00:00.000-06:00')
+        ->and($status->phone())->toBe('5215512345678')
+        ->and($status->pushName())->toBe('Ventas Everest');
 });
 
 it('reporta hibernación con su motivo', function () {

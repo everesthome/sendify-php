@@ -351,8 +351,8 @@ if ($status->canSend()) {
 
 Other shortcuts: `->connected()`, `->hibernated()`, `->suspended()`, `->needsAttention()`,
 `->needsStart()`, `->hasCredentials()`, `->hibernationReason()`, `->hibernatedAt()`,
-`->instanceId()`, `->instanceName()`, `->business()`, `->lastConnectionAt()`, `->lastActiveAt()`,
-`->toArray()`. `Status` is also JSON-serializable, readable as an array (`$status['state']`) and
+`->instanceId()`, `->instanceName()`, `->phone()`, `->pushName()`, `->business()`,
+`->lastConnectionAt()`, `->lastActiveAt()`, `->toArray()`. `Status` is also JSON-serializable, readable as an array (`$status['state']`) and
 castable to string (`"suspended: ..."`).
 
 To follow the progress of a linking attempt: `->connecting()`, `->reconnecting()` (a retry is

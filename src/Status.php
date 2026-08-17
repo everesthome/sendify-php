@@ -220,6 +220,22 @@ final class Status implements ArrayAccess, JsonSerializable, Stringable
         return is_string($name) ? $name : null;
     }
 
+    /** Número de WhatsApp (sin +) que envía los mensajes, o null si no está vinculado. */
+    public function phone(): ?string
+    {
+        $value = $this->details['phone'] ?? null;
+
+        return is_string($value) ? $value : null;
+    }
+
+    /** Nombre del perfil de WhatsApp, o null. */
+    public function pushName(): ?string
+    {
+        $value = $this->details['pushName'] ?? null;
+
+        return is_string($value) ? $value : null;
+    }
+
     /** Fecha ISO de la última conexión con WhatsApp. */
     public function lastConnectionAt(): ?string
     {
